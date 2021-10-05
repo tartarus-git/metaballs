@@ -1,8 +1,10 @@
 #define WINDOW_TITLE "Metaballs"
 #define WINDOW_CLASS_NAME "METABALLS_WINDOW"
 #include "windowSetup.h"
-
 #include "OpenCLBindingsAndHelpers.h"
+
+#include <vector>
+
 #include "debugOutput.h"
 
 #define UWM_EXIT_FROM_THREAD WM_USER
@@ -32,6 +34,9 @@ cl_program computeProgram;
 cl_kernel computeKernel;
 size_t computeKernelWorkGroupSize;
 
+cl_mem outputFrame_computeImage;
+cl_mem positions_computeBuffer;
+
 bool setupComputeDevice() {
 	if (!initOpenCLBindings()) {
 		debuglogger::out << debuglogger::error << "failed to initialize OpenCL bindings" << debuglogger::endl;
@@ -57,11 +62,84 @@ bool setupComputeDevice() {
 	}
 }
 
+bool setDefaultKernelArgs() {
+	cl_int err = clSetKernelArg(computeKernel, 0, sizeof(cl_mem), positions_computeBuffer);
+	if (err != CL_SUCCESS) {
+		debuglogger::out << debuglogger::error << "failed to set positions_computeBuffer kernel arg" << debuglogger::endl;
+		return true;
+	}
+
+	err = clSetKernelArg(computeKernel, 2, sizeof(cl_mem), outputFrame_computeImage);
+	if (err != CL_SUCCESS) {
+		debuglogger::out << debuglogger::error << "failed to set outputFrame_computeImage kernel arg" << debuglogger::endl;
+		return true;
+	}
+
+	return false;
+}
+
+struct Position {
+	float x;
+	float y;
+};
+
+const cl_image_format computeImageFormat = { CL_RGBA, CL_UNSIGNED_INT8 };
+std::vector<Position> positions;
+bool allocateComputeBuffers() {
+	cl_int err;
+	outputFrame_computeImage = clCreateImage2D(computeContext, CL_MEM_WRITE_ONLY, &computeImageFormat, windowWidth, windowHeight, 0, nullptr, &err);
+	if (!outputFrame_computeImage) {
+		debuglogger::out << debuglogger::error << "failed to create outputFrame_computeImage" << debuglogger::endl;
+		return true;
+	}
+
+	positions_computeBuffer = clCreateBuffer(computeContext, CL_MEM_READ_ONLY, positions.size() * sizeof(float), positions.data(), &err);
+	if (!positions_computeBuffer) {
+		debuglogger::out << debuglogger::error << "failed to create positions_computeBuffer" << debuglogger::endl;
+		return true;
+	}
+
+	return setDefaultKernelArgs();
+}
+
+bool setKernelSizeArgs() {
+	size_t positions_count = positions.size();
+	cl_int err = clSetKernelArg(computeKernel, 1, sizeof(unsigned int), &positions_count);
+	if (err != CL_SUCCESS) {
+		debuglogger::out << debuglogger::error << "failed to set positions_count kernel arg" << debuglogger::endl;
+		return true;
+	}
+
+	err = clSetKernelArg(computeKernel, 3, sizeof(unsigned int), &windowWidth);
+	if (err != CL_SUCCESS) {
+		debuglogger::out << debuglogger::error << "failed to set windowWidth kernel arg" << debuglogger::endl;
+		return true;
+	}
+	err = clSetKernelArg(computeKernel, 4, sizeof(unsigned int), &windowHeight);
+	if (err != CL_SUCCESS) {
+		debuglogger::out << debuglogger::error << "failed to set windowHeight kernel arg" << debuglogger::endl;
+		return true;
+	}
+}
+
+#define EXIT_FROM_THREAD if (!PostMessage(hWnd, UWM_EXIT_FROM_THREAD, 0, 0)) { debuglogger::out << debuglogger::error << "failed to post UWM_EXIT_FROM_THREAD message to window queue" << debuglogger::endl; } isAlive = false; return;
+
 void graphicsLoop(HWND hWnd) {
 	if (setupComputeDevice()) {
 		debuglogger::out << debuglogger::error << "failed to set up compute device" << debuglogger::endl;
-		if (!PostMessage(hWnd, UWM_EXIT_FROM_THREAD, 0, 0)) { debuglogger::out << debuglogger::error << "failed to post UWM_EXIT_FROM_THREAD message to window queue" << debuglogger::endl; }
-		isAlive = false;
-		return;
+		EXIT_FROM_THREAD;
+	}
+
+	if (allocateComputeBuffers()) {
+		debuglogger::out << debuglogger::error << "failed to set up compute buffers" << debuglogger::endl;
+		EXIT_FROM_THREAD;
+	}
+
+	positions.push_back({ 100, 100 });
+	positions.push_back({ 200, 200 });
+
+	if (setKernelSizeArgs()) {
+		debuglogger::out << debuglogger::error << "failed to set kernel size args" << debuglogger::endl;
+		EXIT_FROM_THREAD;
 	}
 }

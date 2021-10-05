@@ -22,6 +22,7 @@ bool initOpenCLBindings() {
 	CHECK_FUNC_VALIDITY(clBuildProgram = (clBuildProgram_func)GetProcAddress(DLLProcID, "clBuildProgram"));
 	CHECK_FUNC_VALIDITY(clGetProgramBuildInfo = (clGetProgramBuildInfo_func)GetProcAddress(DLLProcID, "clGetProgramBuildInfo"));
 	CHECK_FUNC_VALIDITY(clCreateKernel = (clCreateKernel_func)GetProcAddress(DLLProcID, "clCreateKernel"));
+	CHECK_FUNC_VALIDITY(clCreateBuffer = (clCreateBuffer_func)GetProcAddress(DLLProcID, "clCreateBuffer"));
 	CHECK_FUNC_VALIDITY(clCreateImage2D = (clCreateImage2D_func)GetProcAddress(DLLProcID, "clCreateImage2D"));
 	CHECK_FUNC_VALIDITY(clSetKernelArg = (clSetKernelArg_func)GetProcAddress(DLLProcID, "clSetKernelArg"));
 	CHECK_FUNC_VALIDITY(clGetKernelWorkGroupInfo = (clGetKernelWorkGroupInfo_func)GetProcAddress(DLLProcID, "clGetKernelWorkGroupInfo"));

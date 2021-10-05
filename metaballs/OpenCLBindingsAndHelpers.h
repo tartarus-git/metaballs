@@ -329,6 +329,14 @@ typedef cl_kernel (CL_API_CALL* clCreateKernel_func)(cl_program program,
 // Creates an OpenCL kernel using the successfully built program. A program can contain multiple kernels if I'm not mistaken, which is why this is necessary.
 inline clCreateKernel_func clCreateKernel;
 
+typedef cl_mem (CL_API_CALL* clCreateBuffer_func)(cl_context context, 
+												  cl_mem_flags flags, 
+												  size_t size, 
+												  void* host_ptr, 
+												  cl_int* errcode_ret);
+// Creates a buffer on the device.
+inline clCreateBuffer_func clCreateBuffer;
+
 typedef cl_mem (CL_API_CALL* clCreateImage2D_func)(cl_context context, 
 												   cl_mem_flags flags, 
 												   const cl_image_format* image_format, 
