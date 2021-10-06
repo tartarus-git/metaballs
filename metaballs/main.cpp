@@ -50,7 +50,7 @@ bool setupComputeDevice() {
 	}
 
 	char* buildLog;
-	err = setupComputeKernel(computeContext, computeDevice, "metaballRenderer.cl", "metaballRenderer.cl", computeProgram, computeKernel, computeKernelWorkGroupSize, buildLog);
+	err = setupComputeKernel(computeContext, computeDevice, "metaballRenderer.cl", "metaballRenderer", computeProgram, computeKernel, computeKernelWorkGroupSize, buildLog);
 	if (err != CL_SUCCESS) {
 		debuglogger::out << debuglogger::error << "failed to set up compute kernel" << debuglogger::endl;
 		if (err == CL_EXT_BUILD_FAILED_WITH_BUILD_LOG) {
@@ -63,13 +63,13 @@ bool setupComputeDevice() {
 }
 
 bool setDefaultKernelArgs() {
-	cl_int err = clSetKernelArg(computeKernel, 0, sizeof(cl_mem), positions_computeBuffer);
+	cl_int err = clSetKernelArg(computeKernel, 0, sizeof(cl_mem), &positions_computeBuffer);
 	if (err != CL_SUCCESS) {
 		debuglogger::out << debuglogger::error << "failed to set positions_computeBuffer kernel arg" << debuglogger::endl;
 		return true;
 	}
 
-	err = clSetKernelArg(computeKernel, 2, sizeof(cl_mem), outputFrame_computeImage);
+	err = clSetKernelArg(computeKernel, 2, sizeof(cl_mem), &outputFrame_computeImage);
 	if (err != CL_SUCCESS) {
 		debuglogger::out << debuglogger::error << "failed to set outputFrame_computeImage kernel arg" << debuglogger::endl;
 		return true;
@@ -79,8 +79,8 @@ bool setDefaultKernelArgs() {
 }
 
 struct Position {
-	float x;
-	float y;
+	int x;
+	int y;
 };
 
 const cl_image_format computeImageFormat = { CL_RGBA, CL_UNSIGNED_INT8 };
@@ -93,7 +93,7 @@ bool allocateComputeBuffers() {
 		return true;
 	}
 
-	positions_computeBuffer = clCreateBuffer(computeContext, CL_MEM_READ_ONLY, positions.size() * sizeof(float), positions.data(), &err);
+	positions_computeBuffer = clCreateBuffer(computeContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, positions.size() * sizeof(Position), positions.data(), &err);
 	if (!positions_computeBuffer) {
 		debuglogger::out << debuglogger::error << "failed to create positions_computeBuffer" << debuglogger::endl;
 		return true;
@@ -103,8 +103,8 @@ bool allocateComputeBuffers() {
 }
 
 bool setKernelSizeArgs() {
-	size_t positions_count = positions.size();
-	cl_int err = clSetKernelArg(computeKernel, 1, sizeof(unsigned int), &positions_count);
+	int positions_count = positions.size();
+	cl_int err = clSetKernelArg(computeKernel, 1, sizeof(int), &positions_count);
 	if (err != CL_SUCCESS) {
 		debuglogger::out << debuglogger::error << "failed to set positions_count kernel arg" << debuglogger::endl;
 		return true;
@@ -122,6 +122,8 @@ bool setKernelSizeArgs() {
 	}
 }
 
+// TODO: Make this goto the end of the graphicsLoop function where everything gets disposed, so that no memory leaks happen. Figure out the control flow for that in all the areas below.
+// Also make it so that the program can return EXIT_FAILURE from thread, and also return EXIT_FAILURE from the window starter function too in case you're not doing that.
 #define EXIT_FROM_THREAD if (!PostMessage(hWnd, UWM_EXIT_FROM_THREAD, 0, 0)) { debuglogger::out << debuglogger::error << "failed to post UWM_EXIT_FROM_THREAD message to window queue" << debuglogger::endl; } isAlive = false; return;
 
 void graphicsLoop(HWND hWnd) {
@@ -130,16 +132,55 @@ void graphicsLoop(HWND hWnd) {
 		EXIT_FROM_THREAD;
 	}
 
+	positions.push_back({ 100, 100 });
+	positions.push_back({ 200, 200 });
+	positions.shrink_to_fit();
+
 	if (allocateComputeBuffers()) {
 		debuglogger::out << debuglogger::error << "failed to set up compute buffers" << debuglogger::endl;
 		EXIT_FROM_THREAD;
 	}
 
-	positions.push_back({ 100, 100 });
-	positions.push_back({ 200, 200 });
-
 	if (setKernelSizeArgs()) {
 		debuglogger::out << debuglogger::error << "failed to set kernel size args" << debuglogger::endl;
 		EXIT_FROM_THREAD;
 	}
+
+	size_t computeGlobalSize[2] = { windowWidth + (computeKernelWorkGroupSize - (windowWidth % computeKernelWorkGroupSize)), windowHeight };
+	size_t computeLocalSize[2] = { computeKernelWorkGroupSize, 1 };
+	size_t computeFrameOrigin[3] = { 0, 0, 0 };
+	size_t computeFrameRegion[3] = { windowWidth, windowHeight, 1 };
+	char* outputFrame = new char[windowWidth * windowHeight * 4];
+
+	HDC finalG = GetDC(hWnd);
+	HDC g = CreateCompatibleDC(finalG);
+	HBITMAP bmp = CreateCompatibleBitmap(finalG, windowWidth, windowHeight);
+	SelectObject(g, bmp);
+
+	while (isAlive) {
+		cl_int err = clEnqueueNDRangeKernel(computeCommandQueue, computeKernel, 2, nullptr, computeGlobalSize, computeLocalSize, 0, nullptr, nullptr);
+		if (err != CL_SUCCESS) {
+			debuglogger::out << debuglogger::error << "failed to enqueue compute kernel" << debuglogger::endl;
+			EXIT_FROM_THREAD;
+		}
+
+		err = clEnqueueReadImage(computeCommandQueue, outputFrame_computeImage, true, computeFrameOrigin, computeFrameRegion, 0, 0, outputFrame, 0, nullptr, nullptr);
+		if (err != CL_SUCCESS) {
+			debuglogger::out << debuglogger::error << "failed to read outputFrame_computeImage from compute device" << debuglogger::endl;
+			EXIT_FROM_THREAD;
+		}
+		if (!SetBitmapBits(bmp, windowWidth * windowHeight * 4, outputFrame)) {
+			debuglogger::out << debuglogger::error << "failed to set bmp bits" << debuglogger::endl;
+			EXIT_FROM_THREAD;
+		}
+		if (!BitBlt(finalG, 0, 0, windowWidth, windowHeight, g, 0, 0, SRCCOPY)) {
+			debuglogger::out << debuglogger::error << "failed to copy g into finalG" << debuglogger::endl;
+			EXIT_FROM_THREAD;
+		}
+	}
+
+	delete[] outputFrame;
+	if (!ReleaseDC(hWnd, finalG)) { debuglogger::out << debuglogger::error << "failed to release window DC (finalG)" << debuglogger::endl; }
+	if (!DeleteDC(g)) { debuglogger::out << debuglogger::error << "failed to delete memory DC (g)" << debuglogger::endl; }
+	if (!DeleteObject(bmp)) { debuglogger::out << debuglogger::error << "failed to delete bmp" << debuglogger::endl; }							// This needs to be deleted after it is no longer selected by any DC.
 }

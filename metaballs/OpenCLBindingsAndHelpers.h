@@ -392,6 +392,18 @@ typedef cl_int (CL_API_CALL* clEnqueueWriteBuffer_func)(cl_command_queue command
 // Enqueues a buffer write on the command queue. You can set the blocking_write flag in order to wait for this function to finish without using clFinish.
 inline clEnqueueWriteBuffer_func clEnqueueWriteBuffer;
 
+typedef cl_int (CL_API_CALL* clEnqueueReadBuffer_func)(cl_command_queue command_queue, 
+													   cl_mem buffer, 
+													   cl_bool blocking_read, 
+													   size_t offset, 
+													   size_t size, 
+													   void* ptr, 
+													   cl_uint num_events_in_wait_list, 
+													   const cl_event* event_wait_list, 
+													   cl_event* event);
+// Enqueues a buffer read on the command queue. You can set the blocking_read flag in order to wait for this function to finish without using clFinish.
+inline clEnqueueReadBuffer_func clEnqueueReadBuffer;
+
 typedef cl_int (CL_API_CALL* clEnqueueWriteImage_func)(cl_command_queue command_queue, 
 													   cl_mem image, 
 													   cl_bool blocking_write, 
