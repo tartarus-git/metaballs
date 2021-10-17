@@ -9,8 +9,17 @@
 
 #define UWM_EXIT_FROM_THREAD WM_USER
 
+int windowMouseX;
+int windowMouseY;
+bool mouseUpdated = false;
 LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	switch (uMsg) {
+	case WM_MOUSEMOVE:
+		if (mouseUpdated) { return 0; }
+		windowMouseX = LOWORD(lParam);
+		windowMouseY = HIWORD(lParam);
+		mouseUpdated = true;
+		return 0;
 	case WM_DESTROY: case UWM_EXIT_FROM_THREAD:
 		PostQuitMessage(0);
 		return 0;
@@ -102,6 +111,15 @@ bool allocateComputeBuffers() {
 	return setDefaultKernelArgs();
 }
 
+bool updateComputePositionsBuffer() {
+	cl_int err = clEnqueueWriteBuffer(computeCommandQueue, positions_computeBuffer, true, 0, positions.size() * sizeof(Position), positions.data(), 0, nullptr, nullptr);
+	if (err != CL_SUCCESS) {
+		debuglogger::out << debuglogger::error << "failed to update positions_computeBuffer" << debuglogger::endl;
+		return true;
+	}
+	return false;
+}
+
 bool setKernelSizeArgs() {
 	int positions_count = positions.size();
 	cl_int err = clSetKernelArg(computeKernel, 1, sizeof(int), &positions_count);
@@ -134,7 +152,6 @@ void graphicsLoop(HWND hWnd) {
 
 	positions.push_back({ 100, 100 });
 	positions.push_back({ 200, 200 });
-	positions.shrink_to_fit();
 
 	if (allocateComputeBuffers()) {
 		debuglogger::out << debuglogger::error << "failed to set up compute buffers" << debuglogger::endl;
@@ -158,6 +175,16 @@ void graphicsLoop(HWND hWnd) {
 	SelectObject(g, bmp);
 
 	while (isAlive) {
+		if (mouseUpdated) {
+			positions[0].x = windowMouseX;
+			positions[0].y = windowMouseY;
+			if (updateComputePositionsBuffer()) {
+				debuglogger::out << debuglogger::error << "failed to move metaball to mouse" << debuglogger::endl;
+				EXIT_FROM_THREAD;
+			}
+			mouseUpdated = false;
+		}
+
 		cl_int err = clEnqueueNDRangeKernel(computeCommandQueue, computeKernel, 2, nullptr, computeGlobalSize, computeLocalSize, 0, nullptr, nullptr);
 		if (err != CL_SUCCESS) {
 			debuglogger::out << debuglogger::error << "failed to enqueue compute kernel" << debuglogger::endl;
@@ -178,7 +205,7 @@ void graphicsLoop(HWND hWnd) {
 			EXIT_FROM_THREAD;
 		}
 	}
-
+	// TODO: Manage exiting using isAlive = false from window thread. BitBlt fails when window is closing, which isn't good at all. Devise a way to exit from the message loop instead of quitting that first.
 	delete[] outputFrame;
 	if (!ReleaseDC(hWnd, finalG)) { debuglogger::out << debuglogger::error << "failed to release window DC (finalG)" << debuglogger::endl; }
 	if (!DeleteDC(g)) { debuglogger::out << debuglogger::error << "failed to delete memory DC (g)" << debuglogger::endl; }
