@@ -29,9 +29,11 @@ LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
 int windowWidth;
 int windowHeight;
+bool windowResized = false;
 void setWindowSize(unsigned int windowWidth, unsigned int windowHeight) {
 	::windowWidth = windowWidth;
 	::windowHeight = windowHeight;
+	windowResized = true;
 }
 
 cl_platform_id computePlatform;
@@ -87,24 +89,37 @@ bool setDefaultKernelArgs() {
 	return false;
 }
 
-struct Position {
-	int x;
-	int y;
-};
+bool allocateFrameComputeBuffer() {
+	cl_int err;
+	outputFrame_computeImage = clCreateImage2D(computeContext, CL_MEM_WRITE_ONLY, &computeImageFormat, windowWidth, windowHeight, 0, nullptr, &err);
+	if (!outputFrame_computeImage) {
+		debuglogger::out << debuglogger::error << "failed to allocate outputFrame_computeImage" << debuglogger::endl;
+		return true;
+	}
+	return false;
+}
+
+bool reallocateFrameComputeBuffer() {
+	cl_int err = clReleaseMemObject(outputFrame_computeImage);
+	if (err != CL_SUCCESS) {
+		debuglogger::out << debuglogger::error << "failed to release outputFrame_computeImage" << debuglogger::endl;
+		return true;
+	}
+
+	return allocateFrameComputeBuffer();
+}
+
+struct Position { int x; int y; };
 
 const cl_image_format computeImageFormat = { CL_RGBA, CL_UNSIGNED_INT8 };
 std::vector<Position> positions;
 bool allocateComputeBuffers() {
-	cl_int err;
-	outputFrame_computeImage = clCreateImage2D(computeContext, CL_MEM_WRITE_ONLY, &computeImageFormat, windowWidth, windowHeight, 0, nullptr, &err);
-	if (!outputFrame_computeImage) {
-		debuglogger::out << debuglogger::error << "failed to create outputFrame_computeImage" << debuglogger::endl;
-		return true;
-	}
+	if (allocateFrameComputeBuffer()) { return true; }
 
+	cl_int err;
 	positions_computeBuffer = clCreateBuffer(computeContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, positions.size() * sizeof(Position), positions.data(), &err);
 	if (!positions_computeBuffer) {
-		debuglogger::out << debuglogger::error << "failed to create positions_computeBuffer" << debuglogger::endl;
+		debuglogger::out << debuglogger::error << "failed to allocate positions_computeBuffer" << debuglogger::endl;
 		return true;
 	}
 
@@ -120,15 +135,8 @@ bool updateComputePositionsBuffer() {
 	return false;
 }
 
-bool setKernelSizeArgs() {
-	int positions_count = positions.size();
-	cl_int err = clSetKernelArg(computeKernel, 1, sizeof(int), &positions_count);
-	if (err != CL_SUCCESS) {
-		debuglogger::out << debuglogger::error << "failed to set positions_count kernel arg" << debuglogger::endl;
-		return true;
-	}
-
-	err = clSetKernelArg(computeKernel, 3, sizeof(unsigned int), &windowWidth);
+bool setKernelWindowSizeArgs() {
+	cl_int err = clSetKernelArg(computeKernel, 3, sizeof(unsigned int), &windowWidth);
 	if (err != CL_SUCCESS) {
 		debuglogger::out << debuglogger::error << "failed to set windowWidth kernel arg" << debuglogger::endl;
 		return true;
@@ -138,6 +146,19 @@ bool setKernelSizeArgs() {
 		debuglogger::out << debuglogger::error << "failed to set windowHeight kernel arg" << debuglogger::endl;
 		return true;
 	}
+	return false;
+}
+
+bool setKernelSizeArgs() {
+	int positions_count = positions.size();
+	cl_int err = clSetKernelArg(computeKernel, 1, sizeof(int), &positions_count);
+	if (err != CL_SUCCESS) {
+		debuglogger::out << debuglogger::error << "failed to set positions_count kernel arg" << debuglogger::endl;
+		return true;
+	}
+
+	if (setKernelWindowSizeArgs()) { return true; }
+	return false;
 }
 
 // TODO: Make this goto the end of the graphicsLoop function where everything gets disposed, so that no memory leaks happen. Figure out the control flow for that in all the areas below.
@@ -203,6 +224,22 @@ void graphicsLoop(HWND hWnd) {
 		if (!BitBlt(finalG, 0, 0, windowWidth, windowHeight, g, 0, 0, SRCCOPY)) {
 			debuglogger::out << debuglogger::error << "failed to copy g into finalG" << debuglogger::endl;
 			EXIT_FROM_THREAD;
+		}
+
+		if (windowResized) {
+			if (reallocateFrameComputeBuffer()) {
+				debuglogger::out << debuglogger::error << "failed to reallocate outputFrame_computeImage" << debuglogger::endl;
+				EXIT_FROM_THREAD;
+			}
+			if (setKernelWindowSizeArgs()) {
+				debuglogger::out << debuglogger::error << "failed to update window size args in kernel" << debuglogger::endl;
+				EXIT_FROM_THREAD;
+			}
+			DeleteObject(bmp);
+			bmp = CreateCompatibleBitmap(finalG, windowWidth, windowHeight);
+			SelectObject(g, bmp);
+			delete[] outputFrame;
+			outputFrame = new char[windowWidth * windowHeight * 4];
 		}
 	}
 	// TODO: Manage exiting using isAlive = false from window thread. BitBlt fails when window is closing, which isn't good at all. Devise a way to exit from the message loop instead of quitting that first.

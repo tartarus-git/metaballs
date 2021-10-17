@@ -32,6 +32,11 @@ bool initOpenCLBindings() {
 	CHECK_FUNC_VALIDITY(clEnqueueReadBuffer = (clEnqueueReadBuffer_func)GetProcAddress(DLLProcID, "clEnqueueReadBuffer"));
 	CHECK_FUNC_VALIDITY(clEnqueueWriteImage = (clEnqueueWriteImage_func)GetProcAddress(DLLProcID, "clEnqueueWriteImage"));
 	CHECK_FUNC_VALIDITY(clEnqueueReadImage = (clEnqueueReadImage_func)GetProcAddress(DLLProcID, "clEnqueueReadImage"));
+	CHECK_FUNC_VALIDITY(clReleaseMemObject = (clReleaseMemObject_func)GetProcAddress(DLLProcID, "clReleaseMemObject"));
+	CHECK_FUNC_VALIDITY(clReleaseKernel = (clReleaseKernel_func)GetProcAddress(DLLProcID, "clReleaseKernel"));
+	CHECK_FUNC_VALIDITY(clReleaseProgram = (clReleaseProgram_func)GetProcAddress(DLLProcID, "clReleaseProgram"));
+	CHECK_FUNC_VALIDITY(clReleaseCommandQueue = (clReleaseCommandQueue_func)GetProcAddress(DLLProcID, "clReleaseCommandQueue"));
+	CHECK_FUNC_VALIDITY(clReleaseContext = (clReleaseContext_func)GetProcAddress(DLLProcID, "clReleaseContext"));
 }
 
 cl_int initOpenCLVarsForBestDevice(const char* targetPlatformVersion, cl_platform_id& bestPlatform, cl_device_id& bestDevice, cl_context& context, cl_command_queue& commandQueue) {

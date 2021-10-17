@@ -432,6 +432,26 @@ typedef cl_int (CL_API_CALL* clEnqueueReadImage_func)(cl_command_queue command_q
 // Enqueues an image read on the command queue. You can set the blocking_read flag in order to wait for this function to finish without using clFinish.
 inline clEnqueueReadImage_func clEnqueueReadImage;
 
+typedef cl_int (CL_API_CALL* clReleaseMemObject_func)(cl_mem memobj);
+// Decrements a memory object's reference count.
+inline clReleaseMemObject_func clReleaseMemObject;
+
+typedef cl_int (CL_API_CALL* clReleaseKernel_func)(cl_kernel kernel);
+// Decrements a kernel's reference count.
+inline clReleaseKernel_func clReleaseKernel;
+
+typedef cl_int (CL_API_CALL* clReleaseProgram_func)(cl_program program);
+// Decrements a program's reference count.
+inline clReleaseProgram_func clReleaseProgram;
+
+typedef cl_int (CL_API_CALL* clReleaseCommandQueue_func)(cl_command_queue command_queue);
+// Decrements a command queue's reference count.
+inline clReleaseCommandQueue_func clReleaseCommandQueue;
+
+typedef cl_int (CL_API_CALL* clReleaseContext_func)(cl_context context);
+// Decrements a context's reference count.
+inline clReleaseContext_func clReleaseContext;
+
 // Simple helper function which initializes the dynamic linkage to the OpenCL DLL and initializes the bindings to all of the various functions.
 bool initOpenCLBindings();
 
