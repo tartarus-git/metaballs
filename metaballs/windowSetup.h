@@ -6,8 +6,42 @@
 
 LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 void setWindowSize(unsigned int windowWidth, unsigned int windowHeight);
-bool isAlive = true;
 void graphicsLoop(HWND hWnd);
+
+bool windowMaximized = false;
+unsigned int tempWindowWidth;
+unsigned int tempWindowHeight;
+bool tempWindowSizesUpdated = false;
+bool listenForResize(UINT uMsg, WPARAM wParam, LPARAM lParam) {
+	switch (uMsg) {
+		case WM_SIZE:
+			switch (wParam) {
+			case SIZE_RESTORED:
+				if (windowMaximized) {
+					setWindowSize(LOWORD(lParam), HIWORD(lParam));
+					windowMaximized = false;
+					return true;
+				}
+				tempWindowWidth = LOWORD(lParam);
+				tempWindowHeight = HIWORD(lParam);
+				tempWindowSizesUpdated = true;
+				return true;
+			case SIZE_MAXIMIZED:
+				setWindowSize(LOWORD(lParam), HIWORD(lParam));
+				windowMaximized = true;
+				tempWindowSizesUpdated = false;
+				return true;
+			}
+			return true;
+		case WM_EXITSIZEMOVE:
+			if (tempWindowSizesUpdated) {
+				setWindowSize(tempWindowWidth, tempWindowHeight);
+				tempWindowSizesUpdated = false;
+			}
+			return true;
+	}
+	return false;
+}
 
 #ifdef UNICODE
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* lpCmdLine, int nCmdShow) {
@@ -55,7 +89,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* lpCmdLine
 		DispatchMessage(&msg);
 	}
 
-	debuglogger::out << "joining with graphics thread and exiting..." << debuglogger::endl;
-	isAlive = false;
+	debuglogger::out << "message loop closed, joining graphicsThread..." << debuglogger::endl;
 	graphicsThread.join();
+
+	debuglogger::out << "successfully joined, terminating program..." << debuglogger::endl;
 }

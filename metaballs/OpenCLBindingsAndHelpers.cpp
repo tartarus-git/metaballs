@@ -6,38 +6,41 @@
 #include <iostream>																																			// Include these two headers for reading from program source files.
 #include <fstream>
 
+HMODULE DLLHandle;
+
 #define CHECK_FUNC_VALIDITY(func) if (!(func)) { return false; }																							// Simple helper define that reports error (returns false) if one of the functions doesn't bind correctly.
-
 bool initOpenCLBindings() {
-	HINSTANCE DLLProcID = LoadLibraryA("OpenCL.dll");																										// Load the OpenCL DLL.
-	if (!DLLProcID) { return false; }																														// If it doesn't load correctly, fail.
+	DLLHandle = LoadLibraryA("OpenCL.dll");																													// Load the OpenCL DLL.
+	if (!DLLHandle) { return false; }																														// If it doesn't load correctly, fail.
 
-	CHECK_FUNC_VALIDITY(clGetPlatformIDs = (clGetPlatformIDs_func)GetProcAddress(DLLProcID, "clGetPlatformIDs"));											// Go through all of the various functions and bind them (get function pointers to them and store those pointers in variables).
-	CHECK_FUNC_VALIDITY(clGetPlatformInfo = (clGetPlatformInfo_func)GetProcAddress(DLLProcID, "clGetPlatformInfo"));										// If any one of these binds fails, everything stops and the whole functions fails.
-	CHECK_FUNC_VALIDITY(clGetDeviceIDs = (clGetDeviceIDs_func)GetProcAddress(DLLProcID, "clGetDeviceIDs"));
-	CHECK_FUNC_VALIDITY(clGetDeviceInfo = (clGetDeviceInfo_func)GetProcAddress(DLLProcID, "clGetDeviceInfo"));
-	CHECK_FUNC_VALIDITY(clCreateContext = (clCreateContext_func)GetProcAddress(DLLProcID, "clCreateContext"));
-	CHECK_FUNC_VALIDITY(clCreateCommandQueue = (clCreateCommandQueue_func)GetProcAddress(DLLProcID, "clCreateCommandQueue"));
-	CHECK_FUNC_VALIDITY(clCreateProgramWithSource = (clCreateProgramWithSource_func)GetProcAddress(DLLProcID, "clCreateProgramWithSource"));
-	CHECK_FUNC_VALIDITY(clBuildProgram = (clBuildProgram_func)GetProcAddress(DLLProcID, "clBuildProgram"));
-	CHECK_FUNC_VALIDITY(clGetProgramBuildInfo = (clGetProgramBuildInfo_func)GetProcAddress(DLLProcID, "clGetProgramBuildInfo"));
-	CHECK_FUNC_VALIDITY(clCreateKernel = (clCreateKernel_func)GetProcAddress(DLLProcID, "clCreateKernel"));
-	CHECK_FUNC_VALIDITY(clCreateBuffer = (clCreateBuffer_func)GetProcAddress(DLLProcID, "clCreateBuffer"));
-	CHECK_FUNC_VALIDITY(clCreateImage2D = (clCreateImage2D_func)GetProcAddress(DLLProcID, "clCreateImage2D"));
-	CHECK_FUNC_VALIDITY(clSetKernelArg = (clSetKernelArg_func)GetProcAddress(DLLProcID, "clSetKernelArg"));
-	CHECK_FUNC_VALIDITY(clGetKernelWorkGroupInfo = (clGetKernelWorkGroupInfo_func)GetProcAddress(DLLProcID, "clGetKernelWorkGroupInfo"));
-	CHECK_FUNC_VALIDITY(clEnqueueNDRangeKernel = (clEnqueueNDRangeKernel_func)GetProcAddress(DLLProcID, "clEnqueueNDRangeKernel"));
-	CHECK_FUNC_VALIDITY(clFinish = (clFinish_func)GetProcAddress(DLLProcID, "clFinish"));
-	CHECK_FUNC_VALIDITY(clEnqueueWriteBuffer = (clEnqueueWriteBuffer_func)GetProcAddress(DLLProcID, "clEnqueueWriteBuffer"));
-	CHECK_FUNC_VALIDITY(clEnqueueReadBuffer = (clEnqueueReadBuffer_func)GetProcAddress(DLLProcID, "clEnqueueReadBuffer"));
-	CHECK_FUNC_VALIDITY(clEnqueueWriteImage = (clEnqueueWriteImage_func)GetProcAddress(DLLProcID, "clEnqueueWriteImage"));
-	CHECK_FUNC_VALIDITY(clEnqueueReadImage = (clEnqueueReadImage_func)GetProcAddress(DLLProcID, "clEnqueueReadImage"));
-	CHECK_FUNC_VALIDITY(clReleaseMemObject = (clReleaseMemObject_func)GetProcAddress(DLLProcID, "clReleaseMemObject"));
-	CHECK_FUNC_VALIDITY(clReleaseKernel = (clReleaseKernel_func)GetProcAddress(DLLProcID, "clReleaseKernel"));
-	CHECK_FUNC_VALIDITY(clReleaseProgram = (clReleaseProgram_func)GetProcAddress(DLLProcID, "clReleaseProgram"));
-	CHECK_FUNC_VALIDITY(clReleaseCommandQueue = (clReleaseCommandQueue_func)GetProcAddress(DLLProcID, "clReleaseCommandQueue"));
-	CHECK_FUNC_VALIDITY(clReleaseContext = (clReleaseContext_func)GetProcAddress(DLLProcID, "clReleaseContext"));
+	CHECK_FUNC_VALIDITY(clGetPlatformIDs = (clGetPlatformIDs_func)GetProcAddress(DLLHandle, "clGetPlatformIDs"));											// Go through all of the various functions and bind them (get function pointers to them and store those pointers in variables).
+	CHECK_FUNC_VALIDITY(clGetPlatformInfo = (clGetPlatformInfo_func)GetProcAddress(DLLHandle, "clGetPlatformInfo"));										// If any one of these binds fails, everything stops and the whole functions fails.
+	CHECK_FUNC_VALIDITY(clGetDeviceIDs = (clGetDeviceIDs_func)GetProcAddress(DLLHandle, "clGetDeviceIDs"));
+	CHECK_FUNC_VALIDITY(clGetDeviceInfo = (clGetDeviceInfo_func)GetProcAddress(DLLHandle, "clGetDeviceInfo"));
+	CHECK_FUNC_VALIDITY(clCreateContext = (clCreateContext_func)GetProcAddress(DLLHandle, "clCreateContext"));
+	CHECK_FUNC_VALIDITY(clCreateCommandQueue = (clCreateCommandQueue_func)GetProcAddress(DLLHandle, "clCreateCommandQueue"));
+	CHECK_FUNC_VALIDITY(clCreateProgramWithSource = (clCreateProgramWithSource_func)GetProcAddress(DLLHandle, "clCreateProgramWithSource"));
+	CHECK_FUNC_VALIDITY(clBuildProgram = (clBuildProgram_func)GetProcAddress(DLLHandle, "clBuildProgram"));
+	CHECK_FUNC_VALIDITY(clGetProgramBuildInfo = (clGetProgramBuildInfo_func)GetProcAddress(DLLHandle, "clGetProgramBuildInfo"));
+	CHECK_FUNC_VALIDITY(clCreateKernel = (clCreateKernel_func)GetProcAddress(DLLHandle, "clCreateKernel"));
+	CHECK_FUNC_VALIDITY(clCreateBuffer = (clCreateBuffer_func)GetProcAddress(DLLHandle, "clCreateBuffer"));
+	CHECK_FUNC_VALIDITY(clCreateImage2D = (clCreateImage2D_func)GetProcAddress(DLLHandle, "clCreateImage2D"));
+	CHECK_FUNC_VALIDITY(clSetKernelArg = (clSetKernelArg_func)GetProcAddress(DLLHandle, "clSetKernelArg"));
+	CHECK_FUNC_VALIDITY(clGetKernelWorkGroupInfo = (clGetKernelWorkGroupInfo_func)GetProcAddress(DLLHandle, "clGetKernelWorkGroupInfo"));
+	CHECK_FUNC_VALIDITY(clEnqueueNDRangeKernel = (clEnqueueNDRangeKernel_func)GetProcAddress(DLLHandle, "clEnqueueNDRangeKernel"));
+	CHECK_FUNC_VALIDITY(clFinish = (clFinish_func)GetProcAddress(DLLHandle, "clFinish"));
+	CHECK_FUNC_VALIDITY(clEnqueueWriteBuffer = (clEnqueueWriteBuffer_func)GetProcAddress(DLLHandle, "clEnqueueWriteBuffer"));
+	CHECK_FUNC_VALIDITY(clEnqueueReadBuffer = (clEnqueueReadBuffer_func)GetProcAddress(DLLHandle, "clEnqueueReadBuffer"));
+	CHECK_FUNC_VALIDITY(clEnqueueWriteImage = (clEnqueueWriteImage_func)GetProcAddress(DLLHandle, "clEnqueueWriteImage"));
+	CHECK_FUNC_VALIDITY(clEnqueueReadImage = (clEnqueueReadImage_func)GetProcAddress(DLLHandle, "clEnqueueReadImage"));
+	CHECK_FUNC_VALIDITY(clReleaseMemObject = (clReleaseMemObject_func)GetProcAddress(DLLHandle, "clReleaseMemObject"));
+	CHECK_FUNC_VALIDITY(clReleaseKernel = (clReleaseKernel_func)GetProcAddress(DLLHandle, "clReleaseKernel"));
+	CHECK_FUNC_VALIDITY(clReleaseProgram = (clReleaseProgram_func)GetProcAddress(DLLHandle, "clReleaseProgram"));
+	CHECK_FUNC_VALIDITY(clReleaseCommandQueue = (clReleaseCommandQueue_func)GetProcAddress(DLLHandle, "clReleaseCommandQueue"));
+	CHECK_FUNC_VALIDITY(clReleaseContext = (clReleaseContext_func)GetProcAddress(DLLHandle, "clReleaseContext"));
 }
+
+bool freeOpenCLLib() { return FreeLibrary(DLLHandle); }
 
 cl_int initOpenCLVarsForBestDevice(const char* targetPlatformVersion, cl_platform_id& bestPlatform, cl_device_id& bestDevice, cl_context& context, cl_command_queue& commandQueue) {
 	// Find the best device on the system.

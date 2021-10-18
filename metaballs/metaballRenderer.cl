@@ -56,6 +56,17 @@ uint4 HSBToRGB(float hue, float saturation, float brightness) {
 	}
 }
 
+float2 thingvoid(int2 thing1, int2 thing2) {
+	int2 thing;
+	thing.x = thing1.x - thing2.y;
+	thing.y = thing1.y - thing2.y;
+
+	float2 result;
+	result.x = (float)thing.x;
+	result.y = (float)thing.y;
+	return result;
+}
+
 __kernel void metaballRenderer(__global int2* positions, unsigned int positions_count, __write_only image2d_t outputFrame, 
 							   unsigned int windowWidth, unsigned int windowHeight) {
 
@@ -66,7 +77,17 @@ __kernel void metaballRenderer(__global int2* positions, unsigned int positions_
 	float value = 0;
 	for (unsigned int i = 0; i < positions_count; i++) {
 		float temp = RADIUS / getDist(coords, positions[i]);
+		//float2 thing = thingvoid(positions[0], positions[1]);
+		//thing = normalize(thing);
+		//float2 curs = thingvoid(coords, positions[1]);
+		//curs = normalize(curs);
+		//float dotx = dot(thing, curs);
+		//temp += dotx * 0.2f;
 		value += temp;
 	}
-	write_imageui(outputFrame, coords, HSBToRGB(fmin(value, 1), 1, 1));
+	if (value > 0.0f) {
+		write_imageui(outputFrame, coords, HSBToRGB(fmin(value, 1), 1, 1));
+		return;
+	}
+	write_imageui(outputFrame, coords, (uint4)(0, 0, 0, 255));
 }

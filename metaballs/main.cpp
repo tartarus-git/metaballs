@@ -9,9 +9,13 @@
 
 #define UWM_EXIT_FROM_THREAD WM_USER
 
-int windowMouseX;
-int windowMouseY;
+bool isAlive = true;
+bool isExiting = true;
+
+unsigned int windowMouseX;
+unsigned int windowMouseY;
 bool mouseUpdated = false;
+
 LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	switch (uMsg) {
 	case WM_MOUSEMOVE:
@@ -20,19 +24,26 @@ LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 		windowMouseY = HIWORD(lParam);
 		mouseUpdated = true;
 		return 0;
-	case WM_DESTROY: case UWM_EXIT_FROM_THREAD:
+	case WM_DESTROY:
+		isAlive = false;
+	case UWM_EXIT_FROM_THREAD:
+		while (isExiting) { }
 		PostQuitMessage(0);
 		return 0;
+	default: if (listenForResize(uMsg, wParam, lParam)) { return 0; }
 	}
 	return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
 
-int windowWidth;
-int windowHeight;
+unsigned int windowWidth;
+unsigned int windowHeight;
+
+unsigned int backWindowWidth;
+unsigned int backWindowHeight;
 bool windowResized = false;
 void setWindowSize(unsigned int windowWidth, unsigned int windowHeight) {
-	::windowWidth = windowWidth;
-	::windowHeight = windowHeight;
+	::backWindowWidth = windowWidth;					// TODO: Get's triggered on simple moves as well, make that not happen.
+	::backWindowHeight = windowHeight;
 	windowResized = true;
 }
 
@@ -41,27 +52,68 @@ cl_context computeContext;
 cl_device_id computeDevice;
 cl_command_queue computeCommandQueue;
 
+bool releaseComputeContextVars() {
+	cl_int err = clReleaseCommandQueue(computeCommandQueue);
+	if (err != CL_SUCCESS) {
+		debuglogger::out << debuglogger::error << "failed to release computeCommandQueue" << debuglogger::endl;
+		return true;
+	}
+	err = clReleaseContext(computeContext);
+	if (err != CL_SUCCESS) {
+		debuglogger::out << debuglogger::error << "failed to release computeContext" << debuglogger::endl;
+		return true;
+	}
+}
+
 cl_program computeProgram;
 cl_kernel computeKernel;
 size_t computeKernelWorkGroupSize;
 
+bool releaseComputeKernelVars() {
+	cl_int err = clReleaseKernel(computeKernel);
+	if (err != CL_SUCCESS) {
+		debuglogger::out << debuglogger::error << "failed to release compute kernel" << debuglogger::endl;
+		return true;
+	}
+	err = clReleaseProgram(computeProgram);
+	if (err != CL_SUCCESS) {
+		debuglogger::out << debuglogger::error << "failed to release compute program" << debuglogger::endl;
+		return true;
+	}
+}
+
 cl_mem outputFrame_computeImage;
 cl_mem positions_computeBuffer;
+
+bool releaseComputeMemoryObjects() {
+	cl_int err = clReleaseMemObject(outputFrame_computeImage);
+	if (err != CL_SUCCESS) {
+		debuglogger::out << debuglogger::error << "failed to release outputFrame_computeImage" << debuglogger::endl;
+		return true;
+	}
+	err = clReleaseMemObject(positions_computeBuffer);
+	if (err != CL_SUCCESS) {
+		debuglogger::out << debuglogger::error << "failed to release positions_computeBuffer" << debuglogger::endl;
+		return true;
+	}
+}
 
 bool setupComputeDevice() {
 	if (!initOpenCLBindings()) {
 		debuglogger::out << debuglogger::error << "failed to initialize OpenCL bindings" << debuglogger::endl;
 		return true;
 	}
+
 	// TODO: Consider making a system where a platform is selected if it's version is at least the version given here through parameters. Would that work?
 	cl_int err = initOpenCLVarsForBestDevice("OpenCL 2.1 ", computePlatform, computeDevice, computeContext, computeCommandQueue);
 	if (err != CL_SUCCESS) {
 		debuglogger::out << debuglogger::error << "failed to find the optimal compute device" << debuglogger::endl;
+		if (!freeOpenCLLib()) { debuglogger::out << debuglogger::error << "failed to free OpenCL library" << debuglogger::endl; }
 		return true;
 	}
 
 	char* buildLog;
-	err = setupComputeKernel(computeContext, computeDevice, "metaballRenderer.cl", "metaballRenderer", computeProgram, computeKernel, computeKernelWorkGroupSize, buildLog);
+	err = setupComputeKernel(computeContext, computeDevice, "metaballRenderer.cl", "metaballRenderer", computeProgram, computeKernel, computeKernelWorkGroupSize, buildLog);				// TODO: Make sure this is in a released state when it fails as a qaruantee.
 	if (err != CL_SUCCESS) {
 		debuglogger::out << debuglogger::error << "failed to set up compute kernel" << debuglogger::endl;
 		if (err == CL_EXT_BUILD_FAILED_WITH_BUILD_LOG) {
@@ -69,6 +121,8 @@ bool setupComputeDevice() {
 			debuglogger::out << "BUILD LOG:" << debuglogger::endl << buildLog << debuglogger::endl;
 			delete[] buildLog;																// TODO: Is there any clean way to get rid of the delete[] here?
 		}
+		if (releaseComputeContextVars()) { debuglogger::out << debuglogger::error << "failed to free compute context vars" << debuglogger::endl; }
+		if (!freeOpenCLLib()) { debuglogger::out << debuglogger::error << "failed to free OpenCL library" << debuglogger::endl; }
 		return true;
 	}
 }
@@ -89,6 +143,7 @@ bool setDefaultKernelArgs() {
 	return false;
 }
 
+const cl_image_format computeImageFormat = { CL_RGBA, CL_UNSIGNED_INT8 };
 bool allocateFrameComputeBuffer() {
 	cl_int err;
 	outputFrame_computeImage = clCreateImage2D(computeContext, CL_MEM_WRITE_ONLY, &computeImageFormat, windowWidth, windowHeight, 0, nullptr, &err);
@@ -99,19 +154,8 @@ bool allocateFrameComputeBuffer() {
 	return false;
 }
 
-bool reallocateFrameComputeBuffer() {
-	cl_int err = clReleaseMemObject(outputFrame_computeImage);
-	if (err != CL_SUCCESS) {
-		debuglogger::out << debuglogger::error << "failed to release outputFrame_computeImage" << debuglogger::endl;
-		return true;
-	}
-
-	return allocateFrameComputeBuffer();
-}
-
 struct Position { int x; int y; };
 
-const cl_image_format computeImageFormat = { CL_RGBA, CL_UNSIGNED_INT8 };
 std::vector<Position> positions;
 bool allocateComputeBuffers() {
 	if (allocateFrameComputeBuffer()) { return true; }
@@ -133,6 +177,16 @@ bool updateComputePositionsBuffer() {
 		return true;
 	}
 	return false;
+}
+
+bool reallocateFrameComputeBuffer() {
+	cl_int err = clReleaseMemObject(outputFrame_computeImage);
+	if (err != CL_SUCCESS) {
+		debuglogger::out << debuglogger::error << "failed to release outputFrame_computeImage" << debuglogger::endl;
+		return true;
+	}
+
+	return allocateFrameComputeBuffer();
 }
 
 bool setKernelWindowSizeArgs() {
@@ -163,12 +217,32 @@ bool setKernelSizeArgs() {
 
 // TODO: Make this goto the end of the graphicsLoop function where everything gets disposed, so that no memory leaks happen. Figure out the control flow for that in all the areas below.
 // Also make it so that the program can return EXIT_FAILURE from thread, and also return EXIT_FAILURE from the window starter function too in case you're not doing that.
-#define EXIT_FROM_THREAD if (!PostMessage(hWnd, UWM_EXIT_FROM_THREAD, 0, 0)) { debuglogger::out << debuglogger::error << "failed to post UWM_EXIT_FROM_THREAD message to window queue" << debuglogger::endl; } isAlive = false; return;
+#define POST_THREAD_EXIT if (!PostMessage(hWnd, UWM_EXIT_FROM_THREAD, 0, 0)) { debuglogger::out << debuglogger::error << "failed to post UWM_EXIT_FROM_THREAD message to window queue" << debuglogger::endl; }
+#define EXIT_FROM_THREAD POST_THREAD_EXIT goto OpenCLRelease_all;
 
 void graphicsLoop(HWND hWnd) {
+	windowWidth = backWindowWidth;
+	windowHeight = backWindowHeight;
+
+	// All this needs to be initialized up here so that the compiler doesn't complain about the goto's below.
+	char* outputFrame = new char[windowWidth * windowHeight * 4];
+
+	HDC finalG = GetDC(hWnd);
+	HDC g = CreateCompatibleDC(finalG);
+	HBITMAP bmp = CreateCompatibleBitmap(finalG, windowWidth, windowHeight);
+	SelectObject(g, bmp);
+
+	size_t computeGlobalSize[2];
+	computeGlobalSize[1] = windowHeight;
+	size_t computeLocalSize[2];
+	computeLocalSize[1] = 1;
+	size_t computeFrameOrigin[3] = { 0, 0, 0 };
+	size_t computeFrameRegion[3] = { windowWidth, windowHeight, 1 };
+
 	if (setupComputeDevice()) {
 		debuglogger::out << debuglogger::error << "failed to set up compute device" << debuglogger::endl;
-		EXIT_FROM_THREAD;
+		POST_THREAD_EXIT;
+		goto OpenCLRelease_freeLib;
 	}
 
 	positions.push_back({ 100, 100 });
@@ -176,7 +250,8 @@ void graphicsLoop(HWND hWnd) {
 
 	if (allocateComputeBuffers()) {
 		debuglogger::out << debuglogger::error << "failed to set up compute buffers" << debuglogger::endl;
-		EXIT_FROM_THREAD;
+		POST_THREAD_EXIT;
+		goto OpenCLRelease_kernelAndContextVars;
 	}
 
 	if (setKernelSizeArgs()) {
@@ -184,16 +259,11 @@ void graphicsLoop(HWND hWnd) {
 		EXIT_FROM_THREAD;
 	}
 
-	size_t computeGlobalSize[2] = { windowWidth + (computeKernelWorkGroupSize - (windowWidth % computeKernelWorkGroupSize)), windowHeight };
-	size_t computeLocalSize[2] = { computeKernelWorkGroupSize, 1 };
-	size_t computeFrameOrigin[3] = { 0, 0, 0 };
-	size_t computeFrameRegion[3] = { windowWidth, windowHeight, 1 };
-	char* outputFrame = new char[windowWidth * windowHeight * 4];
+	// Do the rest of the initialization for the sizes that rely on newly calculated data.
+	computeGlobalSize[0] = windowWidth + (computeKernelWorkGroupSize - (windowWidth % computeKernelWorkGroupSize));
+	computeLocalSize[0] = computeKernelWorkGroupSize;
 
-	HDC finalG = GetDC(hWnd);
-	HDC g = CreateCompatibleDC(finalG);
-	HBITMAP bmp = CreateCompatibleBitmap(finalG, windowWidth, windowHeight);
-	SelectObject(g, bmp);
+	windowResized = false;
 
 	while (isAlive) {
 		if (mouseUpdated) {
@@ -227,24 +297,55 @@ void graphicsLoop(HWND hWnd) {
 		}
 
 		if (windowResized) {
+			windowWidth = backWindowWidth;
+			windowHeight = backWindowHeight;
+
 			if (reallocateFrameComputeBuffer()) {
 				debuglogger::out << debuglogger::error << "failed to reallocate outputFrame_computeImage" << debuglogger::endl;
 				EXIT_FROM_THREAD;
 			}
+
+			if (setDefaultKernelArgs()) {
+				debuglogger::out << debuglogger::error << "failed to put newly allocated outputFrame_computeImage pointer into kernel" << debuglogger::endl;
+				EXIT_FROM_THREAD;
+			}
+
 			if (setKernelWindowSizeArgs()) {
 				debuglogger::out << debuglogger::error << "failed to update window size args in kernel" << debuglogger::endl;
 				EXIT_FROM_THREAD;
 			}
+
+			computeGlobalSize[0] = windowWidth + (computeKernelWorkGroupSize - (windowWidth % computeKernelWorkGroupSize));
+			computeGlobalSize[1] = windowHeight;
+			computeLocalSize[0] = computeKernelWorkGroupSize;
+			computeLocalSize[1] = 1;
+			computeFrameRegion[0] = windowWidth;
+			computeFrameRegion[1] = windowHeight;
+
+			DeleteDC(g);
+			g = CreateCompatibleDC(finalG);
 			DeleteObject(bmp);
 			bmp = CreateCompatibleBitmap(finalG, windowWidth, windowHeight);
 			SelectObject(g, bmp);
 			delete[] outputFrame;
 			outputFrame = new char[windowWidth * windowHeight * 4];
+
+			windowResized = false;
 		}
 	}
-	// TODO: Manage exiting using isAlive = false from window thread. BitBlt fails when window is closing, which isn't good at all. Devise a way to exit from the message loop instead of quitting that first.
+
+OpenCLRelease_all:
+	if (releaseComputeMemoryObjects()) { debuglogger::out << debuglogger::error << "failed to release compute memory objects" << debuglogger::endl; }
+OpenCLRelease_kernelAndContextVars:
+	if (releaseComputeKernelVars()) { debuglogger::out << debuglogger::error << "failed to release compute kernel vars" << debuglogger::endl; }
+	if (releaseComputeContextVars()) { debuglogger::out << debuglogger::error << "failed to release compute context vars" << debuglogger::endl; }
+OpenCLRelease_freeLib:
+	if (!freeOpenCLLib()) { debuglogger::out << debuglogger::error << "failed to free OpenCL library" << debuglogger::endl; }
+
 	delete[] outputFrame;
 	if (!ReleaseDC(hWnd, finalG)) { debuglogger::out << debuglogger::error << "failed to release window DC (finalG)" << debuglogger::endl; }
 	if (!DeleteDC(g)) { debuglogger::out << debuglogger::error << "failed to delete memory DC (g)" << debuglogger::endl; }
 	if (!DeleteObject(bmp)) { debuglogger::out << debuglogger::error << "failed to delete bmp" << debuglogger::endl; }							// This needs to be deleted after it is no longer selected by any DC.
+
+	isExiting = false;
 }

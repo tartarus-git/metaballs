@@ -455,6 +455,9 @@ inline clReleaseContext_func clReleaseContext;
 // Simple helper function which initializes the dynamic linkage to the OpenCL DLL and initializes the bindings to all of the various functions.
 bool initOpenCLBindings();
 
+// Frees the OpenCL library from the current process.
+bool freeOpenCLLib();
+
 cl_int initOpenCLVarsForBestDevice(const char* targetPlatformVersion, cl_platform_id& bestPlatform, cl_device_id& bestDevice, cl_context& context, cl_command_queue& commandQueue);
 
 char* readFromSourceFile(const char* sourceFile);
