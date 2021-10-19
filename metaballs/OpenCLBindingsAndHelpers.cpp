@@ -8,7 +8,7 @@
 
 HMODULE DLLHandle;
 
-#define CHECK_FUNC_VALIDITY(func) if (!(func)) { return false; }																							// Simple helper define that reports error (returns false) if one of the functions doesn't bind correctly.
+#define CHECK_FUNC_VALIDITY(func) if (!(func)) { FreeLibrary(DLLHandle); return false; }				// Simple helper define that reports error (returns false) if one of the functions doesn't bind correctly. Tries it's best to free OpenCL DLL before exiting.
 bool initOpenCLBindings() {
 	DLLHandle = LoadLibraryA("OpenCL.dll");																													// Load the OpenCL DLL.
 	if (!DLLHandle) { return false; }																														// If it doesn't load correctly, fail.
@@ -107,7 +107,10 @@ cl_int initOpenCLVarsForBestDevice(const char* targetPlatformVersion, cl_platfor
 	if (err != CL_SUCCESS) { return err; }
 
 	commandQueue = clCreateCommandQueue(context, cachedBestDevice, 0, &err);																				// Create command queue using the newly created context and the best device. Using cachedBestDevice in case references are pointers.
-	if (err != CL_SUCCESS) { return err; }
+	if (err != CL_SUCCESS) {
+		clReleaseContext(context);											// Errors aren't handled here because it doesn't make a difference if it fails or not.
+		return err;
+	}
 
 	return CL_SUCCESS;																																		// If no error occurred up until this point, return CL_SUCCESS.
 }
@@ -144,25 +147,41 @@ cl_int setupComputeKernel(cl_context context, cl_device_id device, const char* s
 	if (err != CL_SUCCESS) {																																// If build fails, return try to return the build log to the user.
 		size_t buildLogSize;
 		err = clGetProgramBuildInfo(cachedProgram, device, CL_PROGRAM_BUILD_LOG, 0, nullptr, &buildLogSize);												// Get size of build log.
-		if (err != CL_SUCCESS) { return err; }
+		if (err != CL_SUCCESS) {
+			clReleaseProgram(cachedProgram);
+			return err;
+		}
 		buildLog = new char[buildLogSize];																													// Allocate some memory using the reference to the buildLog pointer.
 		err = clGetProgramBuildInfo(cachedProgram, device, CL_PROGRAM_BUILD_LOG, buildLogSize, buildLog, nullptr);											// Get actual build log.
 		if (err != CL_SUCCESS) {
 			delete[] buildLog;
+			clReleaseProgram(cachedProgram);
 			return err;
 		}																																					// Don't delete build log if it is to be returned to caller because caller needs to use it. The caller is responsible for deleting it.
+		clReleaseProgram(cachedProgram);
 		return CL_EXT_BUILD_FAILED_WITH_BUILD_LOG;
 	}
 
 	cachedKernel = clCreateKernel(cachedProgram, kernelName, &err);																							// Create kernel using a specific kernel function in the program.
-	if (!cachedKernel) { return err; }
+	if (!cachedKernel) {
+		clReleaseProgram(cachedProgram);
+		return err;
+	}
 
 	err = clGetKernelWorkGroupInfo(cachedKernel, device, CL_KERNEL_WORK_GROUP_SIZE, sizeof(size_t), &cachedKernelWorkGroupSize, nullptr);					// Get kernel work group size.
-	if (err != CL_SUCCESS) { return err; }
+	if (err != CL_SUCCESS) {
+		clReleaseKernel(cachedKernel);
+		clReleaseProgram(cachedProgram);
+		return err;
+	}
 
 	size_t computeKernelPreferredWorkGroupSizeMultiple;
 	err = clGetKernelWorkGroupInfo(cachedKernel, device, CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE, sizeof(size_t), &computeKernelPreferredWorkGroupSizeMultiple, nullptr);					// Get kernel preferred work group size multiple.
-	if (err != CL_SUCCESS) { return err; }
+	if (err != CL_SUCCESS) {
+		clReleaseKernel(cachedKernel);
+		clReleaseProgram(cachedProgram);
+		return err;
+	}
 
 	if (cachedKernelWorkGroupSize > computeKernelPreferredWorkGroupSizeMultiple) { cachedKernelWorkGroupSize -= cachedKernelWorkGroupSize % computeKernelPreferredWorkGroupSizeMultiple; }		// Compute optimal work group size for kernel based on the raw kernel optimum and kernel preferred work group size multiple.
 

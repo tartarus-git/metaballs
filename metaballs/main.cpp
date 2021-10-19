@@ -10,7 +10,6 @@
 #define UWM_EXIT_FROM_THREAD WM_USER
 
 bool isAlive = true;
-bool isExiting = true;
 
 unsigned int windowMouseX;
 unsigned int windowMouseY;
@@ -26,9 +25,12 @@ LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 		return 0;
 	case WM_DESTROY:
 		isAlive = false;
+		graphicsThread.join();
+		PostQuitMessage(EXIT_SUCCESS);
+		return 0;
 	case UWM_EXIT_FROM_THREAD:
-		while (isExiting) { }
-		PostQuitMessage(0);
+		graphicsThread.join();
+		PostQuitMessage(EXIT_FAILURE);																		// UWM_EXIT_FROM_THREAD is used only for bugs, so make sure the exit code is set to EXIT_FAILURE.
 		return 0;
 	default: if (listenForResize(uMsg, wParam, lParam)) { return 0; }
 	}
@@ -38,12 +40,12 @@ LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 unsigned int windowWidth;
 unsigned int windowHeight;
 
-unsigned int backWindowWidth;
-unsigned int backWindowHeight;
+unsigned int newWindowWidth;
+unsigned int newWindowHeight;
 bool windowResized = false;
-void setWindowSize(unsigned int windowWidth, unsigned int windowHeight) {
-	::backWindowWidth = windowWidth;					// TODO: Get's triggered on simple moves as well, make that not happen.
-	::backWindowHeight = windowHeight;
+void setWindowSize(unsigned int newWindowWidth, unsigned int newWindowHeight) {								// This gets triggered once if the first action of you do is to move the window, for the rest of the moves, it doesn't get triggered.
+	::newWindowWidth = newWindowWidth;																		// This is practically unavoidable without a little much effort. It's not really bad as long as it's just one time, so I'm going to leave it.
+	::newWindowHeight = newWindowHeight;
 	windowResized = true;
 }
 
@@ -63,6 +65,7 @@ bool releaseComputeContextVars() {
 		debuglogger::out << debuglogger::error << "failed to release computeContext" << debuglogger::endl;
 		return true;
 	}
+	return false;
 }
 
 cl_program computeProgram;
@@ -80,6 +83,7 @@ bool releaseComputeKernelVars() {
 		debuglogger::out << debuglogger::error << "failed to release compute program" << debuglogger::endl;
 		return true;
 	}
+	return false;
 }
 
 cl_mem outputFrame_computeImage;
@@ -96,6 +100,7 @@ bool releaseComputeMemoryObjects() {
 		debuglogger::out << debuglogger::error << "failed to release positions_computeBuffer" << debuglogger::endl;
 		return true;
 	}
+	return false;
 }
 
 bool setupComputeDevice() {
@@ -127,20 +132,22 @@ bool setupComputeDevice() {
 	}
 }
 
+bool setFrameKernelArg() {
+	cl_int err = clSetKernelArg(computeKernel, 2, sizeof(cl_mem), &outputFrame_computeImage);
+	if (err != CL_SUCCESS) {
+		debuglogger::out << debuglogger::error << "failed to set outputFrame_computeImage kernel arg" << debuglogger::endl;
+		return true;
+	}
+	return false;
+}
+
 bool setDefaultKernelArgs() {
 	cl_int err = clSetKernelArg(computeKernel, 0, sizeof(cl_mem), &positions_computeBuffer);
 	if (err != CL_SUCCESS) {
 		debuglogger::out << debuglogger::error << "failed to set positions_computeBuffer kernel arg" << debuglogger::endl;
 		return true;
 	}
-
-	err = clSetKernelArg(computeKernel, 2, sizeof(cl_mem), &outputFrame_computeImage);
-	if (err != CL_SUCCESS) {
-		debuglogger::out << debuglogger::error << "failed to set outputFrame_computeImage kernel arg" << debuglogger::endl;
-		return true;
-	}
-
-	return false;
+	return setFrameKernelArg();
 }
 
 const cl_image_format computeImageFormat = { CL_RGBA, CL_UNSIGNED_INT8 };
@@ -170,7 +177,7 @@ bool allocateComputeBuffers() {
 	return setDefaultKernelArgs();
 }
 
-bool updateComputePositionsBuffer() {
+bool updatePositionsComputeBuffer() {
 	cl_int err = clEnqueueWriteBuffer(computeCommandQueue, positions_computeBuffer, true, 0, positions.size() * sizeof(Position), positions.data(), 0, nullptr, nullptr);
 	if (err != CL_SUCCESS) {
 		debuglogger::out << debuglogger::error << "failed to update positions_computeBuffer" << debuglogger::endl;
@@ -211,21 +218,20 @@ bool setKernelSizeArgs() {
 		return true;
 	}
 
-	if (setKernelWindowSizeArgs()) { return true; }
-	return false;
+	return setKernelWindowSizeArgs();
 }
 
-// TODO: Make this goto the end of the graphicsLoop function where everything gets disposed, so that no memory leaks happen. Figure out the control flow for that in all the areas below.
-// Also make it so that the program can return EXIT_FAILURE from thread, and also return EXIT_FAILURE from the window starter function too in case you're not doing that.
 #define POST_THREAD_EXIT if (!PostMessage(hWnd, UWM_EXIT_FROM_THREAD, 0, 0)) { debuglogger::out << debuglogger::error << "failed to post UWM_EXIT_FROM_THREAD message to window queue" << debuglogger::endl; }
 #define EXIT_FROM_THREAD POST_THREAD_EXIT goto OpenCLRelease_all;
 
 void graphicsLoop(HWND hWnd) {
-	windowWidth = backWindowWidth;
-	windowHeight = backWindowHeight;
+	windowWidth = newWindowWidth;
+	windowHeight = newWindowHeight;
+	windowResized = false;
 
 	// All this needs to be initialized up here so that the compiler doesn't complain about the goto's below.
-	char* outputFrame = new char[windowWidth * windowHeight * 4];
+	size_t outputFrame_size = windowWidth * windowHeight * 4;
+	char* outputFrame = new char[outputFrame_size];
 
 	HDC finalG = GetDC(hWnd);
 	HDC g = CreateCompatibleDC(finalG);
@@ -263,19 +269,7 @@ void graphicsLoop(HWND hWnd) {
 	computeGlobalSize[0] = windowWidth + (computeKernelWorkGroupSize - (windowWidth % computeKernelWorkGroupSize));
 	computeLocalSize[0] = computeKernelWorkGroupSize;
 
-	windowResized = false;
-
 	while (isAlive) {
-		if (mouseUpdated) {
-			positions[0].x = windowMouseX;
-			positions[0].y = windowMouseY;
-			if (updateComputePositionsBuffer()) {
-				debuglogger::out << debuglogger::error << "failed to move metaball to mouse" << debuglogger::endl;
-				EXIT_FROM_THREAD;
-			}
-			mouseUpdated = false;
-		}
-
 		cl_int err = clEnqueueNDRangeKernel(computeCommandQueue, computeKernel, 2, nullptr, computeGlobalSize, computeLocalSize, 0, nullptr, nullptr);
 		if (err != CL_SUCCESS) {
 			debuglogger::out << debuglogger::error << "failed to enqueue compute kernel" << debuglogger::endl;
@@ -287,7 +281,7 @@ void graphicsLoop(HWND hWnd) {
 			debuglogger::out << debuglogger::error << "failed to read outputFrame_computeImage from compute device" << debuglogger::endl;
 			EXIT_FROM_THREAD;
 		}
-		if (!SetBitmapBits(bmp, windowWidth * windowHeight * 4, outputFrame)) {
+		if (!SetBitmapBits(bmp, outputFrame_size, outputFrame)) {
 			debuglogger::out << debuglogger::error << "failed to set bmp bits" << debuglogger::endl;
 			EXIT_FROM_THREAD;
 		}
@@ -296,16 +290,26 @@ void graphicsLoop(HWND hWnd) {
 			EXIT_FROM_THREAD;
 		}
 
+		if (mouseUpdated) {
+			positions[0].x = windowMouseX;
+			positions[0].y = windowMouseY;
+			if (updatePositionsComputeBuffer()) {
+				debuglogger::out << debuglogger::error << "failed to move metaball to mouse" << debuglogger::endl;
+				EXIT_FROM_THREAD;
+			}
+			mouseUpdated = false;
+		}
+
 		if (windowResized) {
-			windowWidth = backWindowWidth;
-			windowHeight = backWindowHeight;
+			windowWidth = newWindowWidth;
+			windowHeight = newWindowHeight;
 
 			if (reallocateFrameComputeBuffer()) {
 				debuglogger::out << debuglogger::error << "failed to reallocate outputFrame_computeImage" << debuglogger::endl;
 				EXIT_FROM_THREAD;
 			}
 
-			if (setDefaultKernelArgs()) {
+			if (setFrameKernelArg()) {
 				debuglogger::out << debuglogger::error << "failed to put newly allocated outputFrame_computeImage pointer into kernel" << debuglogger::endl;
 				EXIT_FROM_THREAD;
 			}
@@ -323,15 +327,18 @@ void graphicsLoop(HWND hWnd) {
 			computeFrameRegion[1] = windowHeight;
 
 			DeleteDC(g);
-			g = CreateCompatibleDC(finalG);
+			g = CreateCompatibleDC(finalG);										// TODO: Find a way to unselect the bmp before deleting it, instead of having to do this here.
 			DeleteObject(bmp);
 			bmp = CreateCompatibleBitmap(finalG, windowWidth, windowHeight);
 			SelectObject(g, bmp);
+			outputFrame_size = windowWidth * windowHeight * 4;
 			delete[] outputFrame;
-			outputFrame = new char[windowWidth * windowHeight * 4];
+			outputFrame = new char[outputFrame_size];
 
 			windowResized = false;
 		}
+
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));					// TODO: Make this happen with FrameManager.
 	}
 
 OpenCLRelease_all:
@@ -347,5 +354,5 @@ OpenCLRelease_freeLib:
 	if (!DeleteDC(g)) { debuglogger::out << debuglogger::error << "failed to delete memory DC (g)" << debuglogger::endl; }
 	if (!DeleteObject(bmp)) { debuglogger::out << debuglogger::error << "failed to delete bmp" << debuglogger::endl; }							// This needs to be deleted after it is no longer selected by any DC.
 
-	isExiting = false;
+	// TODO: If this were perfect, this thread would exit with EXIT_FAILURE as well as the main thread if something bad happened, it doesn't yet.
 }

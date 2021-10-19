@@ -4,6 +4,8 @@
 #include "debugOutput.h"
 #include <thread>
 
+std::thread graphicsThread;
+
 LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 void setWindowSize(unsigned int windowWidth, unsigned int windowHeight);
 void graphicsLoop(HWND hWnd);
@@ -80,17 +82,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* lpCmdLine
 	setWindowSize(clientRect.right, clientRect.bottom);
 
 	debuglogger::out << "starting graphics thread..." << debuglogger::endl;
-	std::thread graphicsThread(graphicsLoop, hWnd);
+	graphicsThread = std::thread(graphicsLoop, hWnd);
 
 	debuglogger::out << "running message loop..." << debuglogger::endl;
 	MSG msg = { };
-	while (GetMessage(&msg, NULL, 0, 0)) {
+	while (GetMessage(&msg, nullptr, 0, 0)) {
 		TranslateMessage(&msg);
 		DispatchMessage(&msg);
 	}
 
-	debuglogger::out << "message loop closed, joining graphicsThread..." << debuglogger::endl;
-	graphicsThread.join();
-
-	debuglogger::out << "successfully joined, terminating program..." << debuglogger::endl;
+	if (graphicsThread.joinable()) { graphicsThread.join(); }																											// Join the graphicsThread if the user hasn't done it yet.
+	debuglogger::out << "terminating program..." << debuglogger::endl;
+	return msg.wParam;																																					// As per documentation, the system return code and the PostQuitMessage return code have to be the same.
 }
