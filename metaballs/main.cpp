@@ -110,7 +110,7 @@ bool setupComputeDevice() {
 	}
 
 	// TODO: Consider making a system where a platform is selected if it's version is at least the version given here through parameters. Would that work?
-	cl_int err = initOpenCLVarsForBestDevice("OpenCL 2.1 ", computePlatform, computeDevice, computeContext, computeCommandQueue);
+	cl_int err = initOpenCLVarsForBestDevice("OpenCL 3.0 ", computePlatform, computeDevice, computeContext, computeCommandQueue);
 	if (err != CL_SUCCESS) {
 		debuglogger::out << debuglogger::error << "failed to find the optimal compute device" << debuglogger::endl;
 		if (!freeOpenCLLib()) { debuglogger::out << debuglogger::error << "failed to free OpenCL library" << debuglogger::endl; }
