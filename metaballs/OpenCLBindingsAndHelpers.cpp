@@ -38,6 +38,8 @@ bool initOpenCLBindings() {
 	CHECK_FUNC_VALIDITY(clReleaseProgram = (clReleaseProgram_func)GetProcAddress(DLLHandle, "clReleaseProgram"));
 	CHECK_FUNC_VALIDITY(clReleaseCommandQueue = (clReleaseCommandQueue_func)GetProcAddress(DLLHandle, "clReleaseCommandQueue"));
 	CHECK_FUNC_VALIDITY(clReleaseContext = (clReleaseContext_func)GetProcAddress(DLLHandle, "clReleaseContext"));
+
+	return true;			// Not doing this still works, it's just undefined behaviour, so we need to do this.
 }
 
 bool freeOpenCLLib() { return FreeLibrary(DLLHandle); }
