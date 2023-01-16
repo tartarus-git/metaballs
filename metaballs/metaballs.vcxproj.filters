@@ -21,7 +21,7 @@
     <ClCompile Include="debugOutput.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="OpenCLBindingsAndHelpers.cpp">
+    <ClCompile Include="deps\opencl-bindings-and-helpers\src\cl_bindings_and_helpers.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -29,10 +29,10 @@
     <ClInclude Include="debugOutput.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="OpenCLBindingsAndHelpers.h">
+    <ClInclude Include="windowSetup.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="windowSetup.h">
+    <ClInclude Include="deps\opencl-bindings-and-helpers\include\cl_bindings_and_helpers.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
