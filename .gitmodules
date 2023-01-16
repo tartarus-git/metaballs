@@ -1,0 +1,3 @@
+[submodule "metaballs/deps/opencl-bindings-and-helpers"]
+	path = metaballs/deps/opencl-bindings-and-helpers
+	url = https://github.com/tartarus-git/opencl-bindings-and-helpers.git
