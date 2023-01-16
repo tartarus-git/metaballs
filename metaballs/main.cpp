@@ -31,7 +31,7 @@ LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 		return 0;
 	case UWM_EXIT_FROM_THREAD:
 		graphicsThread.join();
-		PostQuitMessage(EXIT_FAILURE);																		// UWM_EXIT_FROM_THREAD is used only for bugs, so make sure the exit code is set to EXIT_FAILURE.
+		PostQuitMessage(EXIT_FAILURE);	// UWM_EXIT_FROM_THREAD is used only for bugs, so make sure the exit code is set to EXIT_FAILURE.
 		return 0;
 	default: if (listenForResize(uMsg, wParam, lParam)) { return 0; }
 	}
