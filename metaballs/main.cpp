@@ -111,7 +111,7 @@ bool setupComputeDevice() {
 		return true;
 	}
 
-	err = initOpenCLVarsForBestDevice({ 3, 0 }, computePlatform, computeDevice, computeContext, computeCommandQueue);
+	err = initOpenCLVarsForBestDevice({ 2, 1 }, computePlatform, computeDevice, computeContext, computeCommandQueue);
 	if (err != CL_SUCCESS) {
 		debuglogger::out << debuglogger::error << "failed to find the optimal compute device" << debuglogger::endl;
 		if (!freeOpenCLLib()) { debuglogger::out << debuglogger::error << "failed to free OpenCL library" << debuglogger::endl; }
