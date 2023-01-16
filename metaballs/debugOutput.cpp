@@ -6,7 +6,17 @@
 #include <Windows.h>
 
 #include <cstdint>
-#include <stdlib.h>																									// This is included because we need access to _itoa.
+#include <cstdlib>																									// This is included because we need access to _itoa.
+
+#include <string>
+
+DebugOutput& DebugOutput::operator<<(const std::string& input) noexcept {
+#ifndef _DEBUG
+	return *this;
+#endif
+	OutputDebugStringA(input.c_str());
+	return *this;
+}
 
 DebugOutput& DebugOutput::operator<<(const char* input) {
 #ifndef _DEBUG

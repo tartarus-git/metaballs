@@ -1,7 +1,8 @@
 #define WINDOW_TITLE "Metaballs"
 #define WINDOW_CLASS_NAME "METABALLS_WINDOW"
 #include "windowSetup.h"
-#include "OpenCLBindingsAndHelpers.h"
+
+#include "cl_bindings_and_helpers.h"
 
 #include <vector>
 
@@ -104,32 +105,33 @@ bool releaseComputeMemoryObjects() {
 }
 
 bool setupComputeDevice() {
-	if (!initOpenCLBindings()) {
+	cl_int err = initOpenCLBindings();
+	if (err != CL_SUCCESS) {
 		debuglogger::out << debuglogger::error << "failed to initialize OpenCL bindings" << debuglogger::endl;
 		return true;
 	}
 
-	// TODO: Consider making a system where a platform is selected if it's version is at least the version given here through parameters. Would that work?
-	cl_int err = initOpenCLVarsForBestDevice("OpenCL 3.0 ", computePlatform, computeDevice, computeContext, computeCommandQueue);
+	err = initOpenCLVarsForBestDevice({ 3, 0 }, computePlatform, computeDevice, computeContext, computeCommandQueue);
 	if (err != CL_SUCCESS) {
 		debuglogger::out << debuglogger::error << "failed to find the optimal compute device" << debuglogger::endl;
 		if (!freeOpenCLLib()) { debuglogger::out << debuglogger::error << "failed to free OpenCL library" << debuglogger::endl; }
 		return true;
 	}
 
-	char* buildLog;
-	err = setupComputeKernel(computeContext, computeDevice, "metaballRenderer.cl", "metaballRenderer", computeProgram, computeKernel, computeKernelWorkGroupSize, buildLog);				// TODO: Make sure this is in a released state when it fails as a qaruantee.
+	std::string buildLog;
+	err = setupComputeKernelFromFile(computeContext, computeDevice, "metaballRenderer.cl", "metaballRenderer", computeProgram, computeKernel, computeKernelWorkGroupSize, buildLog);				// TODO: Make sure this is in a released state when it fails as a qaruantee.
 	if (err != CL_SUCCESS) {
 		debuglogger::out << debuglogger::error << "failed to set up compute kernel" << debuglogger::endl;
 		if (err == CL_EXT_BUILD_FAILED_WITH_BUILD_LOG) {
 			debuglogger::out << debuglogger::error << "failed build" << debuglogger::endl;
 			debuglogger::out << "BUILD LOG:" << debuglogger::endl << buildLog << debuglogger::endl;
-			delete[] buildLog;																// TODO: Is there any clean way to get rid of the delete[] here?
 		}
 		if (releaseComputeContextVars()) { debuglogger::out << debuglogger::error << "failed to free compute context vars" << debuglogger::endl; }
 		if (!freeOpenCLLib()) { debuglogger::out << debuglogger::error << "failed to free OpenCL library" << debuglogger::endl; }
 		return true;
 	}
+
+	return false;
 }
 
 bool setFrameKernelArg() {

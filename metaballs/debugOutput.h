@@ -2,8 +2,12 @@
 
 #include <cstdint>
 
+#include <string>
+
 class DebugOutput {
 public:
+	DebugOutput& operator<<(const std::string& input) noexcept;
+
 	DebugOutput& operator<<(const char* input);
 	DebugOutput& operator<<(char* input);
 	DebugOutput& operator<<(char input);
